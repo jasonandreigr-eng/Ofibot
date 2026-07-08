@@ -92,6 +92,6 @@ while True:
             speaking = True
             data, samplerate = sf.read("/home/semilleroiot/Desktop/Ofibot/Respuesta.wav")
             sd.play(data,samplerate)
-            sd.wait
+            sd.wait()
             speaking = False
             
