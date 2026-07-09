@@ -9,8 +9,8 @@ from Reconocer import reconocer_rostro
 PASO = 10
 PAUSA = 0.005
 POS_INICIAL = 90
-POS_MAX = 180
-POS_MIN = 0
+POS_MAX = 150
+POS_MIN = 30
 
 def inicializar_servo_cuello():
     i2c = busio.I2C(board.SCL, board.SDA)
@@ -45,9 +45,11 @@ def buscar_rostro(servo_cuello):
         servo_cuello.angle = angulo
         time.sleep(PAUSA)
         if hay_rostro():
-            nombre = reconocer_rostro()
-            servo_cuello.angle = POS_INICIAL
-            return nombre
+            resultado = reconocer_rostro()
+            if resultado is not None:
+                servo_cuello.angle = POS_INICIAL
+                return resultado
+            # si es None, el rostro se perdio: seguir barrido
         angulo += PASO
 
     # Vuelve al centro
@@ -60,15 +62,11 @@ def buscar_rostro(servo_cuello):
         servo_cuello.angle = angulo
         time.sleep(PAUSA)
         if hay_rostro():
-            nombre = reconocer_rostro()
-            servo_cuello.angle = POS_INICIAL
-            return nombre
+            resultado = reconocer_rostro()
+            if resultado is not None:
+                servo_cuello.angle = POS_INICIAL
+                return resultado
         angulo -= PASO
 
     servo_cuello.angle = POS_INICIAL
-    return "Unknown"
-
-if __name__ == "__main__":
-    servo_cuello = inicializar_servo_cuello()
-    resultado = buscar_rostro(servo_cuello)
-    print(f"Resultado busqueda: {resultado}")
+    return None

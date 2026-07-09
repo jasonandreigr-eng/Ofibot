@@ -39,8 +39,9 @@ def hilo_prediccion():
         audio_array = np.array(audio_buffer, dtype='int16')
         prediction = modelo.predict(audio_array)
         for wakeword, score in prediction.items():
+            print(score)
             if score > 0.2:
-                print(f"Soy ofibot!! {score}")
+                print(f"Soy ofibot!!")
                 ultimo_activacion = time.time()
                 audio_buffer.clear()
 

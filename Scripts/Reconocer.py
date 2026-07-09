@@ -17,14 +17,13 @@ def reconocer_rostro():
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         print("Error: No se pudo acceder a la camara USB.")
-        return "Unknown"
+        return None
 
     detecciones = []
 
     for intento in range(NUM_INTENTOS):
         ret, frame = cap.read()
         if not ret:
-            print("Error al capturar frame.")
             continue
 
         resized_frame = cv2.resize(frame, (0, 0), fx=(1/CV_SCALER), fy=(1/CV_SCALER))
@@ -48,8 +47,8 @@ def reconocer_rostro():
     cap.release()
 
     if not detecciones:
-        print("No se detecto ningun rostro.")
-        return "Unknown"
+        print("No se detecto ningun rostro en los intentos.")
+        return None
 
     conteo = Counter(detecciones)
     nombre_mas_comun, veces = conteo.most_common(1)[0]
