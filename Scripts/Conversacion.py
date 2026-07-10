@@ -1,22 +1,11 @@
 import sounddevice as sd
-import soundfile as sf
 import numpy as np
 import time
 import json
-import wave
 import threading
 from collections import deque
-from openwakeword.model import Model
-from google import genai
-from piper import PiperVoice
-from piper import SynthesisConfig
 from Registro import contar_usuarios, registrar_usuario_nuevo
-from openai import OpenAI
-from dotenv import load_dotenv
-from datetime import datetime
-from zoneinfo import ZoneInfo
-import os
-import unicodedata
+from Recursos import client, voice, wake_model, syn_config, hablar, escuchar_comando, obtener_hora, fs
 
 # ---------------- CONFIGURACION GENERAL ----------------
 
@@ -57,36 +46,7 @@ El campo finalizar debe ser true unicamente cuando el usuario se despida o de a 
 No agregues texto fuera del JSON.
 """
 
-# ---------------- CARGA DE MODELOS (una sola vez) ----------------
-
-print("Cargando modelos...")
-load_dotenv()
-gemini_key = os.getenv("GEMINI_API_KEY")
-openai_key = os.getenv("OPENAI_API_KEY")
-client = genai.Client(api_key=gemini_key)
-openai_client = OpenAI(api_key=openai_key)
-
-voice = PiperVoice.load(PIPER_VOICE_PATH)
-syn_config = SynthesisConfig(volume=0.7, length_scale=0.8)
-
-
-
-wake_model = Model(
-    wakeword_models=[WAKEWORD_PATH],
-    inference_framework="onnx"
-)
-for _ in range(5):
-    audio_dummy = np.zeros(int(fs * 3), dtype='int16')
-    wake_model.predict(audio_dummy)
-
-print("Modelos listos. Ofibot en espera.")
-
 # ---------------- GEMINI ----------------
-
-def obtener_hora():
-    zona = ZoneInfo("America/Bogota")
-    ahora = datetime.now(zona)
-    return ahora.strftime("%H:%M del %d/%m/%Y")
 
 def consultar_gemini(historial, intentos=3, espera=5):
     hora_actual = obtener_hora()
@@ -116,13 +76,6 @@ def consultar_gemini(historial, intentos=3, espera=5):
         "respuesta": "En este momento tengo problemas para pensar."
     }
 
-def hablar(texto):
-    with wave.open(RESPUESTA_WAV, "wb") as wav_file:
-        voice.synthesize_wav(texto, wav_file, syn_config=syn_config)
-    data, samplerate = sf.read(RESPUESTA_WAV)
-    sd.play(data, samplerate)
-    sd.wait()
-
 # ---------------- RECONOCIMIENTO FACIAL (carga bajo demanda) ----------------
 
 def identificar_usuario():
@@ -132,39 +85,6 @@ def identificar_usuario():
     return nombre
 
 # ---------------- LOOP DE CONVERSACION ----------------
-
-def es_audio_vacio(audio):
-    return np.abs(audio).max() < UMBRAL_SILENCIO
-
-def normalizar(texto):
-    texto = unicodedata.normalize('NFKD', texto)
-    return texto.encode('ascii', 'ignore').decode('ascii').lower()
-
-def escuchar_comando():
-    audio = sd.rec(tiempo_grab, samplerate=fs, channels=1, dtype='int16')
-    sd.wait()
-
-    if es_audio_vacio(audio):
-        return ""
-
-    with wave.open(INTERACCION_WAV, "wb") as wav_file:
-        wav_file.setnchannels(1)
-        wav_file.setsampwidth(2)
-        wav_file.setframerate(fs)
-        wav_file.writeframes(audio.tobytes())
-
-    with open(INTERACCION_WAV, "rb") as f:
-        transcripcion = openai_client.audio.transcriptions.create(
-            model="whisper-1",
-            file=f,
-            language="es"
-        )
-    texto = transcripcion.text.strip()
-
-    if normalizar(texto) == TEXTO_AMARA:
-        return ""
-
-    return texto
 
 def loop_conversacion(usuario):
     historial = []

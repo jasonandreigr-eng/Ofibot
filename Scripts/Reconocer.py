@@ -1,6 +1,7 @@
 import face_recognition
 import cv2
 import numpy as np
+import os
 import pickle
 from collections import Counter
 
@@ -9,6 +10,9 @@ NUM_INTENTOS = 5
 CV_SCALER = 4
 
 def reconocer_rostro():
+    if not os.path.exists(ENCODINGS_FILE):
+        return "Unknown"
+
     with open(ENCODINGS_FILE, "rb") as f:
         data = pickle.loads(f.read())
     known_face_encodings = data["encodings"]
