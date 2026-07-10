@@ -212,6 +212,7 @@ buffer_listo = threading.Event()
 en_conversacion = False
 ultimo_activacion = 0
 delay_reactivacion = 3
+MAX_USUARIOS = 6
 
 def callback(indata, frames, time_info, status):
     if en_conversacion:

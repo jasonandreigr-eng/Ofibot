@@ -9,6 +9,7 @@ def contar_usuarios():
     return len([d for d in os.listdir(DATABASE_DIR) if os.path.isdir(os.path.join(DATABASE_DIR, d))])
 
 def capturar_nombre_por_voz():
+    from Conversacion import hablar, escuchar_comando
     hablar("No te reconozco. Cual es tu nombre?")
     intentos = 0
     while intentos < 3:
@@ -20,7 +21,7 @@ def capturar_nombre_por_voz():
 
 def registrar_usuario_nuevo():
     from Conocer import conocer
-
+    from Conversacion import hablar
     nombre = capturar_nombre_por_voz()
     if nombre is None:
         hablar("No logre escucharte, intentemos mas tarde.")
