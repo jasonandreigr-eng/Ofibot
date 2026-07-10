@@ -40,10 +40,14 @@ def extraer_nombre(texto, intentos=3, espera=3):
     return None
 
 def capturar_nombre_por_voz():
+    from Recursos import hablar, escuchar_comando
     hablar("No te reconozco. Cual es tu nombre?")
     intentos = 0
     while intentos < 3:
         texto = escuchar_comando()
+        if texto is None:
+            hablar("En este momento no puedo escuchar")
+            return None
         if texto != "":
             nombre = extraer_nombre(texto)
             if nombre:

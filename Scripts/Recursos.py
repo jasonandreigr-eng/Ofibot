@@ -63,7 +63,7 @@ def normalizar(texto):
     texto = unicodedata.normalize('NFKD', texto)
     return texto.encode('ascii', 'ignore').decode('ascii').lower()
 
-def escuchar_comando():
+def escuchar_comando(intentos=3, espera=3):
     audio = sd.rec(tiempo_grab, samplerate=fs, channels=1, dtype='int16')
     sd.wait()
 
@@ -76,15 +76,24 @@ def escuchar_comando():
         wav_file.setframerate(fs)
         wav_file.writeframes(audio.tobytes())
 
-    with open(INTERACCION_WAV, "rb") as f:
-        transcripcion = openai_client.audio.transcriptions.create(
-            model="whisper-1",
-            file=f,
-            language="es"
-        )
-    texto = transcripcion.text.strip()
+    for i in range(intentos):
+        try:
+            with open(INTERACCION_WAV, "rb") as f:
+                transcripcion = openai_client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=f,
+                    language="es"
+                )
+            texto = transcripcion.text.strip()
 
-    if normalizar(texto) == TEXTO_AMARA:
-        return ""
+            if normalizar(texto) == TEXTO_AMARA:
+                return ""
 
-    return texto
+            return texto
+        except Exception as e:
+            print(f"error whisper: {e}")
+            if i < intentos - 1:
+                import time
+                time.sleep(espera)
+
+    return None

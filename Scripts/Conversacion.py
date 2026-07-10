@@ -24,6 +24,7 @@ TEXTO_AMARA = "Subtitulos realizados por la comunidad de amara.org"
 Config = """
 Eres Ofibot, un robot asistente de oficina amigable y servicial.
 Te estan hablando desde un microfono, si detectas un error de transcripcion dilo con naturalidad.
+En caso que se refieran a ti con un nombre distinto a Ofibot ignoralo, es error de transcripcion.
 Tu personalidad es:
 - Amable y profesional
 - Conciso en tus respuestas (maximo 2-3 oraciones)
@@ -94,6 +95,10 @@ def loop_conversacion(usuario):
         print("Escuchando comando...")
         texto = escuchar_comando()
 
+        if texto is None:
+            hablar("En este momento no puedo escuchar")
+            break
+
         if texto == "":
             print("Sin nuevas palabras. Cerrando conversacion.")
             break
@@ -161,33 +166,32 @@ def hilo_wakeword():
                 en_conversacion = True
                 audio_buffer.clear()
 
-                usuario = identificar_usuario()
-                audio_buffer.clear()
-                buffer_listo.clear()
+                try:
+                    usuario = identificar_usuario()
+                    audio_buffer.clear()
+                    buffer_listo.clear()
 
-                print(f"Usuario identificado: {usuario}")
+                    print(f"Usuario identificado: {usuario}")
 
-                if usuario is None:
-                    hablar("No veo a nadie, te puedes acercar un poco mas?")
-                    continue
+                    if usuario is None:
+                        hablar("No veo a nadie, te puedes acercar un poco mas?")
+                        continue
 
-                if usuario == "Unknown":
-                    if contar_usuarios() < MAX_USUARIOS:
-                        usuario = registrar_usuario_nuevo()
-                        if usuario is None:
-                            audio_buffer.clear()
-                            buffer_listo.clear()
-                            continue
-                    else:
-                        hablar("Ya tengo el cupo maximo de usuarios registrados, pero puedo ayudarte igual.")
+                    if usuario == "Unknown":
+                        if contar_usuarios() < MAX_USUARIOS:
+                            usuario = registrar_usuario_nuevo()
+                            if usuario is None:
+                                continue
+                        else:
+                            hablar("Ya tengo el cupo maximo de usuarios registrados, pero puedo ayudarte igual.")
 
-                loop_conversacion(usuario)
-
-                time.sleep(1)
-                ultimo_activacion = time.time()
-                audio_buffer.clear()
-                buffer_listo.clear()
-                en_conversacion = False
+                    loop_conversacion(usuario)
+                finally:
+                    time.sleep(1)
+                    ultimo_activacion = time.time()
+                    audio_buffer.clear()
+                    buffer_listo.clear()
+                    en_conversacion = False
                 
 
 # ---------------- MAIN ----------------
