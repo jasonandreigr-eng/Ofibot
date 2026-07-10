@@ -1,5 +1,6 @@
 import sounddevice as sd
 from scipy.io.wavfile import write
+import numpy as np
 
 fs = 44100  # frecuencia de muestreo
 seconds = 5  # duración de la grabación
@@ -11,3 +12,4 @@ print("Grabación finalizada.")
 
 write("prueba.wav", fs, audio)
 print("Archivo guardado como 'prueba.wav'")
+print(f"Valor maximo detectado: {np.abs(audio).max()}")

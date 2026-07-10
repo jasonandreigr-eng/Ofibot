@@ -13,7 +13,10 @@ from piper import SynthesisConfig
 from Registro import contar_usuarios, registrar_usuario_nuevo
 from openai import OpenAI
 from dotenv import load_dotenv
+from datetime import datetime
+from zoneinfo import ZoneInfo
 import os
+import unicodedata
 
 # ---------------- CONFIGURACION GENERAL ----------------
 
@@ -26,6 +29,8 @@ fs = 16000
 chunk_size = int(fs * 2)
 tiempo_grab = int(fs * 3)
 umbral_wakeword = 0.15
+UMBRAL_SILENCIO = 10000  # ajustar segun sensibilidad del microfono
+TEXTO_AMARA = "Subtitulos realizados por la comunidad de amara.org"
 
 Config = """
 Eres Ofibot, un robot asistente de oficina amigable y servicial.
@@ -78,14 +83,21 @@ print("Modelos listos. Ofibot en espera.")
 
 # ---------------- GEMINI ----------------
 
+def obtener_hora():
+    zona = ZoneInfo("America/Bogota")
+    ahora = datetime.now(zona)
+    return ahora.strftime("%H:%M del %d/%m/%Y")
+
 def consultar_gemini(historial, intentos=3, espera=5):
+    hora_actual = obtener_hora()
+    config_dinamico = Config + f"\nHora actual en Colombia: {hora_actual}"
     for i in range(intentos):
         try:
             response = client.models.generate_content(
                 model="gemini-3.1-flash-lite",
                 contents=historial,
                 config={
-                    "system_instruction": Config,
+                    "system_instruction": config_dinamico,
                     "response_mime_type": "application/json"
                 }
             )
@@ -121,9 +133,19 @@ def identificar_usuario():
 
 # ---------------- LOOP DE CONVERSACION ----------------
 
+def es_audio_vacio(audio):
+    return np.abs(audio).max() < UMBRAL_SILENCIO
+
+def normalizar(texto):
+    texto = unicodedata.normalize('NFKD', texto)
+    return texto.encode('ascii', 'ignore').decode('ascii').lower()
+
 def escuchar_comando():
     audio = sd.rec(tiempo_grab, samplerate=fs, channels=1, dtype='int16')
     sd.wait()
+
+    if es_audio_vacio(audio):
+        return ""
 
     with wave.open(INTERACCION_WAV, "wb") as wav_file:
         wav_file.setnchannels(1)
@@ -137,12 +159,17 @@ def escuchar_comando():
             file=f,
             language="es"
         )
-    return transcripcion.text.strip()
+    texto = transcripcion.text.strip()
+
+    if normalizar(texto) == TEXTO_AMARA:
+        return ""
+
+    return texto
 
 def loop_conversacion(usuario):
     historial = []
     print(f"Iniciando conversacion con {usuario}")
-
+    hablar(f"Hola {usuario}, como te puedo ayudar")
     while True:
         print("Escuchando comando...")
         texto = escuchar_comando()
@@ -182,16 +209,20 @@ def ejecutar_accion(accion):
 buffer_size = int(fs * 1)
 audio_buffer = deque(maxlen=buffer_size)
 buffer_listo = threading.Event()
+en_conversacion = False
 ultimo_activacion = 0
 delay_reactivacion = 3
 
 def callback(indata, frames, time_info, status):
+    if en_conversacion:
+        return
     audio_buffer.extend(indata[:, 0])
     if len(audio_buffer) == buffer_size:
         buffer_listo.set()
 
 def hilo_wakeword():
     global ultimo_activacion
+    global en_conversacion
     while True:
         buffer_listo.wait()
         buffer_listo.clear()
@@ -206,6 +237,7 @@ def hilo_wakeword():
             if score > umbral_wakeword:
                 print(f"Wakeword detectada ({score:.2f})")
                 ultimo_activacion = time.time()
+                en_conversacion = True
                 audio_buffer.clear()
 
                 usuario = identificar_usuario()
@@ -230,8 +262,11 @@ def hilo_wakeword():
 
                 loop_conversacion(usuario)
 
+                time.sleep(1)
+                ultimo_activacion = time.time()
                 audio_buffer.clear()
                 buffer_listo.clear()
+                en_conversacion = False
                 
 
 # ---------------- MAIN ----------------
