@@ -1,3 +1,4 @@
 Ofibot-env
 Scripts/dataset
 .env
+Scripts/__pycache__

@@ -1,4 +1,6 @@
 import sounddevice as sd
+import Estado_global
+from Servidor_web import iniciar_flask
 import numpy as np
 import time
 import json
@@ -21,36 +23,64 @@ umbral_wakeword = 0.15
 UMBRAL_SILENCIO = 10000  # ajustar segun sensibilidad del microfono
 TEXTO_AMARA = "Subtitulos realizados por la comunidad de amara.org"
 
-Config = """
-Eres Ofibot, un robot asistente de oficina amigable y servicial.
-Te estan hablando desde un microfono, si detectas un error de transcripcion dilo con naturalidad.
-En caso que se refieran a ti con un nombre distinto a Ofibot ignoralo, es error de transcripcion.
-Tu personalidad es:
-- Amable y profesional
-- Conciso en tus respuestas (maximo 2-3 oraciones)
-- Siempre hablas en espanol
-- Usas un tono cercano
+def construir_Config():
+    estado = Estado_global.get_estado()
+    config = """
+    Eres Ofibot, un robot asistente de oficina amigable y servicial.
+    Te estan hablando desde un microfono, si detectas un error de transcripcion dilo con naturalidad.
+    En caso que se refieran a ti con un nombre distinto a Ofibot ignoralo, es error de transcripcion.
+    Tu personalidad es:
+    - Nivel de sociabilidad actual (1-10): {estado['sociabilidad']}
+    - Nivel de formalidad actual (1-10): {estado['formalidad']}
+    - Conciso en tus respuestas (maximo 2-3 oraciones)
+    - Siempre hablas en espanol
+    Ajusta tu tono de respuesta segun estos valores.
 
-El nombre del usuario que te llama se te dara en cada mensaje, usalo con naturalidad.
+    El nombre del usuario que te llama se te dara en cada mensaje, usalo con naturalidad.
 
-Responde SIEMPRE en formato JSON valido con esta estructura exacta:
-{
-  "usuario": "nombre del usuario",
-  "estado_animo": "feliz|neutral|molesto|triste|emocionado",
-  "accion": "ninguna|baila|celebra|saluda",
-  "finalizar": true o false,
-  "respuesta": "texto que se dira en voz alta"
-}
+    Responde SIEMPRE en formato JSON valido con esta estructura exacta:
+    {
+      "usuario": "nombre del usuario",
+      "estado_animo": "saludo|neutro|enojo|triste|emocion|duda|aburrimiento|asombro|descanso",
+      "accion": "ninguna|baila|celebra|saluda",
+      "finalizar": true o false,
+      "respuesta": "texto que se dira en voz alta"
+    }
 
-El campo finalizar debe ser true unicamente cuando el usuario se despida o de a entender que quiere terminar la conversacion (ej: gracias hasta luego, eso es todo, nos vemos). En cualquier otro caso debe ser false.
+    El campo finalizar debe ser true unicamente cuando el usuario se despida o de a entender que quiere terminar la conversacion (ej: gracias hasta luego, eso es todo, nos vemos). En cualquier otro caso debe ser false.
 
-No agregues texto fuera del JSON.
-"""
+    No agregues texto fuera del JSON.
+    """
+    return config
+# ------------- Interfaz -----------------
+def loop_conversacion(usuario):
+    Estado_global.marcar_inicio_conversacion(usuario)
+    historial = []
+    hablar(f"Hola {usuario}, como te puedo ayudar")
+    while True:
+        texto = escuchar_comando()
+        if texto == "":
+            break
 
+        t0 = time.time()  # inicio de medicion
+        data = consultar_gemini(historial)
+        t1 = time.time()
+        Estado_global.registrar_tiempo_respuesta(t1 - t0)
+
+        Estado_global.set_estado_animo(data.get("estado_animo", "neutro"))
+
+        respuesta_texto = data.get("respuesta", "")
+        hablar(respuesta_texto)
+
+        if data.get("finalizar", False):
+            break
+
+    Estado_global.marcar_fin_conversacion()
 # ---------------- GEMINI ----------------
 
 def consultar_gemini(historial, intentos=3, espera=5):
     hora_actual = obtener_hora()
+    Config = construir_Config()
     config_dinamico = Config + f"\nHora actual en Colombia: {hora_actual}"
     for i in range(intentos):
         try:
@@ -72,7 +102,7 @@ def consultar_gemini(historial, intentos=3, espera=5):
                 print(f"error gemini: {e}")
     return {
         "usuario": "desconocido",
-        "estado_animo": "neutral",
+        "estado_animo": "neutro",
         "accion": "ninguna",
         "respuesta": "En este momento tengo problemas para pensar."
     }
@@ -197,6 +227,10 @@ def hilo_wakeword():
 # ---------------- MAIN ----------------
 
 if __name__ == "__main__":
+    hilo_servidor = threading.Thread(target=iniciar_flask, daemon=True)
+    hilo_servidor.start()
+    print("[SERVIDOR] Hilo del servidor web iniciado en puerto 5000")
+    
     hilo = threading.Thread(target=hilo_wakeword, daemon=True)
     hilo.start()
 

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Ofibot - Panel Usuario</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 2rem; }
+    .estado { font-size: 2.5rem; font-weight: bold; text-transform: uppercase; }
+    button { margin: 0.3rem; padding: 0.5rem 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Estado de Ofibot</h1>
+  <div class="estado" id="estado">Neutral</div>
+  <p id="animo">Cargando...</p>
+  <p id="tiempo_respuesta"></p>
+
+  <h3>Cambiar estado de animo</h3>
+  <button onclick="cambiarAnimo('saludo')">Saludo</button>
+  <button onclick="cambiarAnimo('neutro')">Neutro</button>
+  <button onclick="cambiarAnimo('enojo')">Enojo</button>
+  <button onclick="cambiarAnimo('triste')">Triste</button>
+  <button onclick="cambiarAnimo('emocion')">Emocion</button>
+  <button onclick="cambiarAnimo('duda')">Duda</button>
+  <button onclick="cambiarAnimo('aburrimiento')">Aburrimiento</button>
+  <button onclick="cambiarAnimo('asombro')">Asombro</button>
+  <button onclick="cambiarAnimo('descanso')">Descanso</button>
+
+  <script>
+    async function actualizar() {
+      const res = await fetch("/api/estado");
+      const data = await res.json();
+      document.getElementById("estado").innerText = data.estado_animo;
+      document.getElementById("animo").innerText = "Animo: " + data.estado_animo;
+      document.getElementById("tiempo_respuesta").innerText =
+        data.ultimo_tiempo_respuesta ? `Ultima respuesta: ${data.ultimo_tiempo_respuesta}s` : "";
+    }
+
+    async function cambiarAnimo(nuevo) {
+      await fetch("/api/estado_animo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estado_animo: nuevo })
+      });
+      actualizar();
+    }
+
+    setInterval(actualizar, 2000); // refresca cada 2 segundos
+    actualizar();
+  </script>
+</body>
+</html>

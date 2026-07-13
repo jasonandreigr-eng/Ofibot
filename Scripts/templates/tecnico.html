@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Ofibot - Panel Tecnico</title>
+  <style>
+    body { font-family: sans-serif; padding: 2rem; max-width: 700px; margin: auto; }
+    .config { margin-bottom: 2rem; }
+    label { display: block; margin-top: 1rem; }
+    input[type=range] { width: 100%; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
+    #mensaje { color: green; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Panel Tecnico - Ofibot</h1>
+
+  <div class="config">
+    <h3>Configuracion</h3>
+    <label>Sociabilidad: <span id="val_sociabilidad">5</span>/10</label>
+    <input type="range" id="sociabilidad" min="1" max="10" value="5"
+           oninput="document.getElementById('val_sociabilidad').innerText = this.value">
+
+    <label>Formalidad: <span id="val_formalidad">5</span>/10</label>
+    <input type="range" id="formalidad" min="1" max="10" value="5"
+           oninput="document.getElementById('val_formalidad').innerText = this.value">
+
+    <button onclick="guardarConfig()">Guardar configuracion</button>
+    <p id="mensaje"></p>
+  </div>
+
+  <div class="historial">
+    <h3>Historial de usuarios</h3>
+    <table id="tabla_historial">
+      <thead>
+        <tr><th>Nombre</th><th>Hora</th><th>Duracion (s)</th></tr>
+      </thead>
+      <tbody id="cuerpo_historial">
+        <tr><td colspan="3">Cargando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    const TOKEN = prompt("Token de acceso tecnico:");
+
+    async function guardarConfig() {
+      const sociabilidad = document.getElementById("sociabilidad").value;
+      const formalidad = document.getElementById("formalidad").value;
+
+      const res = await fetch("/api/config", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + TOKEN
+        },
+        body: JSON.stringify({
+          sociabilidad: parseInt(sociabilidad),
+          formalidad: parseInt(formalidad)
+        })
+      });
+
+      const mensaje = document.getElementById("mensaje");
+      if (res.status === 401) {
+        mensaje.style.color = "red";
+        mensaje.innerText = "Token invalido. Recarga la pagina e intenta de nuevo.";
+      } else {
+        mensaje.style.color = "green";
+        mensaje.innerText = "Configuracion guardada correctamente.";
+      }
+    }
+
+    async function cargarHistorial() {
+      const res = await fetch("/api/historial", {
+        headers: { "Authorization": "Bearer " + TOKEN }
+      });
+
+      const cuerpo = document.getElementById("cuerpo_historial");
+
+      if (res.status === 401) {
+        cuerpo.innerHTML = "<tr><td colspan='3'>Token invalido</td></tr>";
+        return;
+      }
+
+      const data = await res.json();
+
+      if (data.length === 0) {
+        cuerpo.innerHTML = "<tr><td colspan='3'>Sin registros aun</td></tr>";
+        return;
+      }
+
+      cuerpo.innerHTML = data.map(item => `
+        <tr>
+          <td>${item.nombre}</td>
+          <td>${item.hora}</td>
+          <td>${item.duracion_seg ?? "-"}</td>
+        </tr>
+      `).join("");
+    }
+
+    // Se ejecuta apenas carga la pagina
+    cargarHistorial();
+  </script>
+</body>
+</html>
