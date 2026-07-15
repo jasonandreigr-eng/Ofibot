@@ -2,7 +2,8 @@
 import threading
 import json
 import time
-from datetime import datetime
+import uuid
+from datetime import datetime, timedelta
 
 _lock = threading.Lock()
 
@@ -13,7 +14,8 @@ _estado = {
     "ultimo_usuario": None,
     "en_conversacion": False,
     "ultimo_tiempo_respuesta": None, # segundos
-    "historial_usuarios": []         # lista de dicts: {nombre, hora, duracion}
+    "historial_usuarios": [],        # lista de dicts: {nombre, hora, duracion}
+    "recordatorios": []              # lista de dicts: {id, usuario, texto, hora_disparo, tipo, activo}
 }
 
 HISTORIAL_FILE = "historial_usuarios.json"
@@ -60,3 +62,41 @@ def marcar_fin_conversacion():
 def registrar_tiempo_respuesta(segundos):
     with _lock:
         _estado["ultimo_tiempo_respuesta"] = round(segundos, 2)
+
+# ---------------- RECORDATORIOS ----------------
+
+def agregar_recordatorio(usuario, texto, segundos, tipo="recordatorio"):
+    with _lock:
+        nuevo = {
+            "id": str(uuid.uuid4()),
+            "usuario": usuario,
+            "texto": texto,
+            "hora_disparo": (datetime.now() + timedelta(seconds=segundos)).isoformat(),
+            "tipo": tipo,
+            "activo": True
+        }
+        _estado["recordatorios"].append(nuevo)
+        return nuevo["id"]
+
+def obtener_recordatorios_pendientes():
+    with _lock:
+        return [r for r in _estado["recordatorios"] if r["activo"]]
+
+def cancelar_recordatorio(id_recordatorio):
+    with _lock:
+        for r in _estado["recordatorios"]:
+            if r["id"] == id_recordatorio:
+                r["activo"] = False
+                return True
+        return False
+
+def revisar_vencidos():
+    """Devuelve los recordatorios que ya vencieron y los marca como inactivos."""
+    ahora = datetime.now()
+    vencidos = []
+    with _lock:
+        for r in _estado["recordatorios"]:
+            if r["activo"] and datetime.fromisoformat(r["hora_disparo"]) <= ahora:
+                r["activo"] = False
+                vencidos.append(r)
+    return vencidos

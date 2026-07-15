@@ -52,7 +52,7 @@ def api_set_config():
 def api_historial():
     if not requiere_token():
         return jsonify({"error": "no autorizado"}), 401
-    return jsonify(estado_global.get_estado()["historial_usuarios"])
+    return jsonify(Estado_global.get_estado()["historial_usuarios"])
 def iniciar_flask():
     app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False, threaded=True)
 

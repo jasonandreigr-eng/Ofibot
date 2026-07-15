@@ -19,7 +19,7 @@ INTERACCION_WAV = "/home/semilleroiot/Desktop/Ofibot/Audios/interaccion.wav"
 fs = 16000
 chunk_size = int(fs * 2)
 tiempo_grab = int(fs * 3)
-umbral_wakeword = 0.15
+umbral_wakeword = 0.25
 UMBRAL_SILENCIO = 10000  # ajustar segun sensibilidad del microfono
 TEXTO_AMARA = "Subtitulos realizados por la comunidad de amara.org"
 
@@ -29,7 +29,7 @@ def construir_Config():
     Eres Ofibot, un robot asistente de oficina amigable y servicial.
     Te estan hablando desde un microfono, si detectas un error de transcripcion dilo con naturalidad.
     En caso que se refieran a ti con un nombre distinto a Ofibot ignoralo, es error de transcripcion.
-    Tu personalidad es:
+    Tu personalidad es:                                                                               
     - Nivel de sociabilidad actual (1-10): {estado['sociabilidad']}
     - Nivel de formalidad actual (1-10): {estado['formalidad']}
     - Conciso en tus respuestas (maximo 2-3 oraciones)
@@ -42,40 +42,22 @@ def construir_Config():
     {
       "usuario": "nombre del usuario",
       "estado_animo": "saludo|neutro|enojo|triste|emocion|duda|aburrimiento|asombro|descanso",
-      "accion": "ninguna|baila|celebra|saluda",
+      "accion": "ninguna|baila|celebra|saluda|asiente|niega|recordatorio",
+      "recordatorio_texto": "texto a recordar o null",
+      "recordatorio_segundos": numero o null,
       "finalizar": true o false,
       "respuesta": "texto que se dira en voz alta"
     }
 
+    El campo accion debe ser "recordatorio" unicamente cuando el usuario pida explicitamente que se le recuerde algo en un tiempo determinado. En ese caso, recordatorio_texto y recordatorio_segundos deben ir completos (convierte minutos/horas a segundos). En cualquier otro caso ambos deben ser null.
+    
     El campo finalizar debe ser true unicamente cuando el usuario se despida o de a entender que quiere terminar la conversacion (ej: gracias hasta luego, eso es todo, nos vemos). En cualquier otro caso debe ser false.
 
     No agregues texto fuera del JSON.
     """
     return config
-# ------------- Interfaz -----------------
-def loop_conversacion(usuario):
-    Estado_global.marcar_inicio_conversacion(usuario)
-    historial = []
-    hablar(f"Hola {usuario}, como te puedo ayudar")
-    while True:
-        texto = escuchar_comando()
-        if texto == "":
-            break
 
-        t0 = time.time()  # inicio de medicion
-        data = consultar_gemini(historial)
-        t1 = time.time()
-        Estado_global.registrar_tiempo_respuesta(t1 - t0)
 
-        Estado_global.set_estado_animo(data.get("estado_animo", "neutro"))
-
-        respuesta_texto = data.get("respuesta", "")
-        hablar(respuesta_texto)
-
-        if data.get("finalizar", False):
-            break
-
-    Estado_global.marcar_fin_conversacion()
 # ---------------- GEMINI ----------------
 
 def consultar_gemini(historial, intentos=3, espera=5):
@@ -118,6 +100,7 @@ def identificar_usuario():
 # ---------------- LOOP DE CONVERSACION ----------------
 
 def loop_conversacion(usuario):
+    Estado_global.marcar_inicio_conversacion(usuario)
     historial = []
     print(f"Iniciando conversacion con {usuario}")
     hablar(f"Hola {usuario}, como te puedo ayudar")
@@ -137,13 +120,24 @@ def loop_conversacion(usuario):
         mensaje = f"[Usuario: {usuario}] {texto}"
         historial.append({"role": "user", "parts": [{"text": mensaje}]})
 
+        t0 = time.time()
         data = consultar_gemini(historial)
+        t1 = time.time()
+        Estado_global.registrar_tiempo_respuesta(t1 - t0)
+
         respuesta_texto = data.get("respuesta", "")
         print(f"Ofibot ({data.get('estado_animo')}, accion: {data.get('accion')}): {respuesta_texto}")
 
+        Estado_global.set_estado_animo(data.get("estado_animo", "neutro"))
+
         historial.append({"role": "model", "parts": [{"text": json.dumps(data)}]})
 
-        if data.get("accion", "ninguna") != "ninguna":
+        if data.get("accion", "ninguna") == "recordatorio":
+            texto_rec = data.get("recordatorio_texto")
+            segundos_rec = data.get("recordatorio_segundos")
+            if texto_rec and segundos_rec:
+                Estado_global.agregar_recordatorio(usuario, texto_rec, segundos_rec)
+        elif data.get("accion", "ninguna") != "ninguna":
             ejecutar_accion(data["accion"])
 
         hablar(respuesta_texto)
@@ -152,9 +146,10 @@ def loop_conversacion(usuario):
             print("Despedida detectada. Cerrando conversacion.")
             break
 
+    Estado_global.marcar_fin_conversacion()
     historial.clear()
     print("Historial eliminado. Ofibot en espera.")
-
+    
 def ejecutar_accion(accion):
     # Aqui se conectaran los movimientos de servos segun la accion
     print(f"[ACCION] ejecutando: {accion}")
@@ -223,6 +218,19 @@ def hilo_wakeword():
                     buffer_listo.clear()
                     en_conversacion = False
                 
+# ---------------- RECORDATORIOS ----------------
+
+def hilo_recordatorios():
+    while True:
+        time.sleep(5)
+
+        # No revisar mientras hay una conversacion activa
+        if en_conversacion:
+            continue
+
+        vencidos = Estado_global.revisar_vencidos()
+        for r in vencidos:
+            hablar(f"Recordatorio: {r['texto']}")
 
 # ---------------- MAIN ----------------
 
@@ -230,9 +238,13 @@ if __name__ == "__main__":
     hilo_servidor = threading.Thread(target=iniciar_flask, daemon=True)
     hilo_servidor.start()
     print("[SERVIDOR] Hilo del servidor web iniciado en puerto 5000")
-    
+
     hilo = threading.Thread(target=hilo_wakeword, daemon=True)
     hilo.start()
+
+    hilo_rec = threading.Thread(target=hilo_recordatorios, daemon=True)
+    hilo_rec.start()
+    print("[RECORDATORIOS] Hilo de recordatorios iniciado")
 
     with sd.InputStream(samplerate=fs, channels=1, dtype='int16', callback=callback):
         print("Escuchando wakeword...")
