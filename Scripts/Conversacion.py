@@ -29,7 +29,7 @@ def construir_Config():
     Eres Ofibot, un robot asistente de oficina amigable y servicial.
     Te estan hablando desde un microfono, si detectas un error de transcripcion dilo con naturalidad.
     En caso que se refieran a ti con un nombre distinto a Ofibot ignoralo, es error de transcripcion.
-    Tu personalidad es:                                                                               
+    Tu personalidad es:
     - Nivel de sociabilidad actual (1-10): {estado['sociabilidad']}
     - Nivel de formalidad actual (1-10): {estado['formalidad']}
     - Conciso en tus respuestas (maximo 2-3 oraciones)
@@ -37,6 +37,8 @@ def construir_Config():
     Ajusta tu tono de respuesta segun estos valores.
 
     El nombre del usuario que te llama se te dara en cada mensaje, usalo con naturalidad.
+    Si el nombre del usuario es "Unknown", NO uses ningun nombre al dirigirte a el,
+    tratalo de forma neutral y amigable sin mencionar identidad (ej: "hola, en que te puedo ayudar").
 
     Responde SIEMPRE en formato JSON valido con esta estructura exacta:
     {
@@ -56,7 +58,6 @@ def construir_Config():
     No agregues texto fuera del JSON.
     """
     return config
-
 
 # ---------------- GEMINI ----------------
 
@@ -92,9 +93,8 @@ def consultar_gemini(historial, intentos=3, espera=5):
 # ---------------- RECONOCIMIENTO FACIAL (carga bajo demanda) ----------------
 
 def identificar_usuario():
-    from Buscar_Rostro import inicializar_servo_cuello, buscar_rostro
-    servo_cuello = inicializar_servo_cuello()
-    nombre = buscar_rostro(servo_cuello)
+    from Buscar_Rostro import buscar_rostro
+    nombre = buscar_rostro()
     return nombre
 
 # ---------------- LOOP DE CONVERSACION ----------------
@@ -103,7 +103,10 @@ def loop_conversacion(usuario):
     Estado_global.marcar_inicio_conversacion(usuario)
     historial = []
     print(f"Iniciando conversacion con {usuario}")
-    hablar(f"Hola {usuario}, como te puedo ayudar")
+    if usuario == "Unknown":
+        hablar("Hola, como te puedo ayudar")
+    else:
+        hablar(f"Hola {usuario}, como te puedo ayudar")
     while True:
         print("Escuchando comando...")
         texto = escuchar_comando()

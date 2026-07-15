@@ -1,45 +1,14 @@
-import board
-import busio  #Libreria comunicacion (buses de datos)
 from PIL import Image, ImageDraw, ImageOps
-import adafruit_ssd1306
-import adafruit_tca9548a
-import adafruit_pca9685
+import Hardware
 import time
 
-UMBRAL = 170  # mas alto = mas pixeles se vuelven negros
+UMBRAL = 170
 
-# Inicializar bus I2C de la Raspberry Pi e Inicializar multiplexor TCA9548A en direccion 0x70
-i2c = busio.I2C(board.SCL, board.SDA)
-tca = adafruit_tca9548a.TCA9548A(i2c)
-time.sleep(0.05)
-# Seleccionar canal 2
-oled0_i2c = tca[2]
-oled0 = adafruit_ssd1306.SSD1306_I2C(128, 64, oled0_i2c)
-
-oled0.fill(0)
-oled0.show()
-time.sleep(0.05)
-
-
-# Seleccionar canal 3
-oled1_i2c = tca[3]
-oled1 = adafruit_ssd1306.SSD1306_I2C(128, 64, oled1_i2c)
-
-oled1.fill(0)
-oled1.show()
-time.sleep(0.05)
-
-## Definicion Colorea LED's RGB
-
-# Multiplexor -> controlador de servos/leds
-control_i2c = tca[1]
-control = adafruit_pca9685.PCA9685(control_i2c)
-control.frequency = 50
-
-# Canales del LED RGB
-led_r = control.channels[1]
-led_g = control.channels[2]
-led_b = control.channels[3]
+oled0 = Hardware.oled0
+oled1 = Hardware.oled1
+led_r = Hardware.led_r
+led_g = Hardware.led_g
+led_b = Hardware.led_b
 
 def hex_to_rgb(hex_color):
     hex_color = hex_color.lstrip('#')
