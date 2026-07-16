@@ -32,7 +32,7 @@ client = genai.Client(api_key=gemini_key)
 openai_client = OpenAI(api_key=openai_key)
 
 voice = PiperVoice.load(PIPER_VOICE_PATH)
-syn_config = SynthesisConfig(volume=0.7, length_scale=0.8)
+syn_config = SynthesisConfig(volume=1.0, length_scale=0.8)
 
 wake_model = Model(
     wakeword_models=[WAKEWORD_PATH],

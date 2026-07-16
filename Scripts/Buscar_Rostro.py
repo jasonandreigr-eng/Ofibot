@@ -4,7 +4,7 @@ from Reconocer import reconocer_rostro
 import cv2
 import face_recognition
 
-PASO = 10
+PASO = 5
 PAUSA = 0.005
 POS_INICIAL = 90
 POS_MAX = 150
@@ -19,7 +19,7 @@ def hay_rostro(cap):
     return len(locations) > 0
 
 def buscar_rostro():
-    servo_cuello = Hardware.servo_cuello
+    servo_cuello = Hardware.servo_cabeza_h
     servo_cuello.angle = POS_INICIAL
     time.sleep(0.2)
 
@@ -35,7 +35,7 @@ def buscar_rostro():
             servo_cuello.angle = angulo
             time.sleep(PAUSA)
             if hay_rostro(cap):
-                resultado = reconocer_rostro()
+                resultado = reconocer_rostro(cap)
                 if resultado is not None:
                     resultado_final = resultado
                     break
@@ -50,7 +50,7 @@ def buscar_rostro():
                 servo_cuello.angle = angulo
                 time.sleep(PAUSA)
                 if hay_rostro(cap):
-                    resultado = reconocer_rostro()
+                    resultado = reconocer_rostro(cap)
                     if resultado is not None:
                         resultado_final = resultado
                         break

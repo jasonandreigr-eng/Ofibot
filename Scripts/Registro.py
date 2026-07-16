@@ -1,8 +1,7 @@
 import os
 from Recursos import client, hablar, escuchar_comando
 
-DATABASE_DIR = "/home/semilleroiot/Desktop/Ofibot/Scripts/dataset"
-MAX_USUARIOS = 6
+DATABASE_DIR = "dataset"
 
 CONFIG_NOMBRE = """
 Tu tarea es extraer un nombre propio de una frase dicha por una persona.

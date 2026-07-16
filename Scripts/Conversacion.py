@@ -158,33 +158,52 @@ def ejecutar_accion(accion):
     print(f"[ACCION] ejecutando: {accion}")
     
 # ---------------- WAKEWORD ----------------
+buffer_size = int(fs * 1)          # 1 segundo de audio, tamano de ventana de analisis
+paso_lectura = int(fs * 0.25)      # cada 250ms se evalua una nueva ventana (solapamiento)
 
-buffer_size = int(fs * 1)
-audio_buffer = deque(maxlen=buffer_size)
-buffer_listo = threading.Event()
+buffer_circular = np.zeros(buffer_size, dtype='int16')
+lock_buffer = threading.Lock()
+muestras_nuevas = 0                # cuenta cuantas muestras nuevas llegaron desde la ultima lectura
+
 en_conversacion = False
 ultimo_activacion = 0
 delay_reactivacion = 3
 MAX_USUARIOS = 6
 
 def callback(indata, frames, time_info, status):
+    global buffer_circular, muestras_nuevas
+
     if en_conversacion:
         return
-    audio_buffer.extend(indata[:, 0])
-    if len(audio_buffer) == buffer_size:
-        buffer_listo.set()
+
+    datos = indata[:, 0]
+    n = len(datos)
+
+    with lock_buffer:
+        # desplaza el buffer y agrega los datos nuevos al final (FIFO)
+        buffer_circular = np.roll(buffer_circular, -n)
+        buffer_circular[-n:] = datos
+        muestras_nuevas += n
 
 def hilo_wakeword():
-    global ultimo_activacion
-    global en_conversacion
+    global ultimo_activacion, en_conversacion, muestras_nuevas, buffer_circular
+
     while True:
-        buffer_listo.wait()
-        buffer_listo.clear()
+        time.sleep(0.05)  # evita busy-waiting
+
+        if en_conversacion:
+            continue
+
+        if muestras_nuevas < paso_lectura:
+            continue
+
+        with lock_buffer:
+            audio_array = buffer_circular.copy()
+            muestras_nuevas = 0
 
         if time.time() - ultimo_activacion < delay_reactivacion:
             continue
 
-        audio_array = np.array(audio_buffer, dtype='int16')
         prediction = wake_model.predict(audio_array)
 
         for wakeword, score in prediction.items():
@@ -192,12 +211,14 @@ def hilo_wakeword():
                 print(f"Wakeword detectada ({score:.2f})")
                 ultimo_activacion = time.time()
                 en_conversacion = True
-                audio_buffer.clear()
+
+                # reset a ceros para arrancar limpio en la proxima escucha
+                with lock_buffer:
+                    buffer_circular[:] = 0
+                    muestras_nuevas = 0
 
                 try:
                     usuario = identificar_usuario()
-                    audio_buffer.clear()
-                    buffer_listo.clear()
 
                     print(f"Usuario identificado: {usuario}")
 
@@ -217,10 +238,13 @@ def hilo_wakeword():
                 finally:
                     time.sleep(1)
                     ultimo_activacion = time.time()
-                    audio_buffer.clear()
-                    buffer_listo.clear()
+
+                    # reset adicional al volver de la conversacion, por seguridad
+                    with lock_buffer:
+                        buffer_circular[:] = 0
+                        muestras_nuevas = 0
+
                     en_conversacion = False
-                
 # ---------------- RECORDATORIOS ----------------
 
 def hilo_recordatorios():

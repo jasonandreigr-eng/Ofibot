@@ -9,7 +9,7 @@ ENCODINGS_FILE = "encodings.pickle"
 NUM_INTENTOS = 5
 CV_SCALER = 4
 
-def reconocer_rostro():
+def reconocer_rostro(cap):
     if not os.path.exists(ENCODINGS_FILE):
         return "Unknown"
 
@@ -17,11 +17,6 @@ def reconocer_rostro():
         data = pickle.loads(f.read())
     known_face_encodings = data["encodings"]
     known_face_names = data["names"]
-
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        print("Error: No se pudo acceder a la camara USB.")
-        return None
 
     detecciones = []
 
@@ -47,8 +42,6 @@ def reconocer_rostro():
                     name = known_face_names[best_match_index]
 
             detecciones.append(name)
-
-    cap.release()
 
     if not detecciones:
         print("No se detecto ningun rostro en los intentos.")
