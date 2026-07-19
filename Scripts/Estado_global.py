@@ -13,6 +13,7 @@ _estado = {
     "sociabilidad": 5,               # escala 1-10, ajustable en panel tecnico
     "formalidad": 5,                 # escala 1-10
     "ultimo_usuario": None,
+    "buscando_rostro": False,
     "en_conversacion": False,
     "ultimo_tiempo_respuesta": None, # segundos
     "historial_usuarios": [],        # lista de dicts: {nombre, hora, duracion}
@@ -44,6 +45,10 @@ def set_config(sociabilidad=None, formalidad=None):
             _estado["sociabilidad"] = sociabilidad
         if formalidad is not None:
             _estado["formalidad"] = formalidad
+
+def set_buscando_rostro(valor):
+    with _lock:
+        _estado["buscando_rostro"] = valor
 
 def marcar_inicio_conversacion(usuario):
     with _lock:

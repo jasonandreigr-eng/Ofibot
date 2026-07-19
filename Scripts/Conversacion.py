@@ -7,7 +7,7 @@ import json
 import threading
 from collections import deque
 from Registro import contar_usuarios, registrar_usuario_nuevo
-from Recursos import client, voice, wake_model, syn_config, hablar, escuchar_comando, obtener_hora, fs
+from Recursos import client, voice, wake_model, syn_config, hablar, escuchar_comando, obtener_hora, fs, reproducir_cierre,consultar_correos_no_leidos, consultar_eventos_calendario	
 import Movimientos
 import expresiones
 
@@ -27,7 +27,7 @@ TEXTO_AMARA = "Subtitulos realizados por la comunidad de amara.org"
 
 def construir_Config():
     estado = Estado_global.get_estado()
-    config = """
+    config = f"""
     Eres Ofibot, un robot asistente de oficina amigable y servicial.
     Te estan hablando desde un microfono, si detectas un error de transcripcion dilo con naturalidad.
     En caso que se refieran a ti con un nombre distinto a Ofibot ignoralo, es error de transcripcion.
@@ -43,24 +43,27 @@ def construir_Config():
     tratalo de forma neutral y amigable sin mencionar identidad (ej: "hola, en que te puedo ayudar").
 
     Responde SIEMPRE en formato JSON valido con esta estructura exacta:
-    {
+    {{
       "usuario": "nombre del usuario",
       "estado_animo": "saludo|neutro|enojo|triste|emocion|duda|aburrimiento|asombro|descanso",
-      "accion": "ninguna|baila|celebra|saluda|asiente|niega|recordatorio",
+      "accion": "ninguna|baila|celebra|saluda|asiente|niega|recordatorio|consultar_calendario|consultar_correos",
       "recordatorio_texto": "texto a recordar o null",
       "recordatorio_segundos": numero o null,
       "finalizar": true o false,
       "respuesta": "texto que se dira en voz alta"
-    }
+    }}
 
     El campo accion debe ser "recordatorio" unicamente cuando el usuario pida explicitamente que se le recuerde algo en un tiempo determinado. En ese caso, recordatorio_texto y recordatorio_segundos deben ir completos (convierte minutos/horas a segundos). En cualquier otro caso ambos deben ser null.
     
     El campo finalizar debe ser true unicamente cuando el usuario se despida o de a entender que quiere terminar la conversacion (ej: gracias hasta luego, eso es todo, nos vemos). En cualquier otro caso debe ser false.
 
+    El campo accion debe ser "consultar_calendario" unicamente cuando el usuario pregunte por su agenda, eventos o calendario. En este caso, el campo "respuesta" debe quedar vacio, se completara automaticamente.
+
+    El campo accion debe ser "consultar_correos" unicamente cuando el usuario pregunte por sus correos, emails o bandeja de entrada. En este caso, el campo "respuesta" debe quedar vacio, se completara automaticamente.
+    
     No agregues texto fuera del JSON.
     """
     return config
-
 # ---------------- GEMINI ----------------
 
 def consultar_gemini(historial, intentos=3, espera=5):
@@ -144,13 +147,37 @@ def loop_conversacion(usuario):
             segundos_rec = data.get("recordatorio_segundos")
             if texto_rec and segundos_rec:
                 Estado_global.agregar_recordatorio(usuario, texto_rec, segundos_rec)
+        if data.get("accion") == "consultar_calendario":
+            eventos = consultar_eventos_calendario()
+            if not eventos:
+                resumen_eventos = "No hay eventos proximos en el calendario."
+            else:
+                resumen_eventos = "\n".join([f"{e['titulo']} - {e['inicio']}" for e in eventos])
+
+            historial.append({"role": "user", "parts": [{"text": f"[Datos del calendario]\n{resumen_eventos}\nResume esto en voz para el usuario."}]})
+            data = consultar_gemini(historial)
+            respuesta_texto = data.get("respuesta", "")
+            historial.append({"role": "model", "parts": [{"text": json.dumps(data)}]})
+            
+        if data.get("accion") == "consultar_correos":
+            info = consultar_correos_no_leidos()
+            if info["total"] == 0:
+                resumen_correos = "No hay correos sin leer."
+            else:
+                detalle = "\n".join([f"{c['asunto']} - {c['remitente']}" for c in info["correos"]])
+                resumen_correos = f"Total no leidos: {info['total']}\n{detalle}"
+
+            historial.append({"role": "user", "parts": [{"text": f"[Datos de correo]\n{resumen_correos}\nResume esto en voz para el usuario."}]})
+            data = consultar_gemini(historial)
+            respuesta_texto = data.get("respuesta", "")
+            historial.append({"role": "model", "parts": [{"text": json.dumps(data)}]})
 
         hablar(respuesta_texto)
 
         if data.get("finalizar", False):
             print("Despedida detectada. Cerrando conversacion.")
             break
-
+    reproducir_cierre()
     Estado_global.marcar_fin_conversacion()
     historial.clear()
     print("Historial eliminado. Ofibot en espera.")
@@ -216,7 +243,9 @@ def hilo_wakeword():
                     muestras_nuevas = 0
 
                 try:
+                    Estado_global.set_buscando_rostro(True)
                     usuario = identificar_usuario()
+                    Estado_global.set_buscando_rostro(False)
 
                     print(f"Usuario identificado: {usuario}")
 

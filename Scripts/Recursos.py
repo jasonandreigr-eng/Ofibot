@@ -56,8 +56,19 @@ def hablar(texto):
     sd.play(data, samplerate)
     sd.wait()
 
+MARGEN_INICIO_SEG = 0.2
+
 def es_audio_vacio(audio):
-    return np.abs(audio).max() < UMBRAL_SILENCIO
+    muestras_margen = int(fs * MARGEN_INICIO_SEG)
+    audio_util = audio[muestras_margen:]
+    return np.abs(audio_util).max() < UMBRAL_SILENCIO
+
+SONIDO_CIERRE_WAV = "/home/semilleroiot/Desktop/Ofibot/Audios/cierre.wav"
+
+def reproducir_cierre():
+    data, samplerate = sf.read(SONIDO_CIERRE_WAV)
+    sd.play(data, samplerate)
+    sd.wait()
 
 def normalizar(texto):
     texto = unicodedata.normalize('NFKD', texto)
@@ -97,3 +108,96 @@ def escuchar_comando(intentos=3, espera=3):
                 time.sleep(espera)
 
     return None
+
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+
+SCOPES = [
+    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/gmail.readonly"
+]
+
+def obtener_credenciales_google():
+    creds = Credentials(
+        token=None,
+        refresh_token=os.getenv("GOOGLE_REFRESH_TOKEN"),
+        client_id=os.getenv("GOOGLE_CLIENT_ID"),
+        client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+        token_uri="https://oauth2.googleapis.com/token",
+        scopes=SCOPES
+    )
+    return creds
+
+def obtener_servicio_calendar():
+    creds = obtener_credenciales_google()
+    return build("calendar", "v3", credentials=creds)
+
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+def consultar_eventos_calendario(dias=7):
+    servicio = obtener_servicio_calendar()
+    zona = ZoneInfo("America/Bogota")
+    ahora = datetime.now(zona)
+    limite = ahora + timedelta(days=dias)
+
+    eventos_result = servicio.events().list(
+        calendarId="primary",
+        timeMin=ahora.isoformat(),
+        timeMax=limite.isoformat(),
+        singleEvents=True,
+        orderBy="startTime"
+    ).execute()
+
+    eventos = eventos_result.get("items", [])
+
+    if not eventos:
+        return []
+
+    lista = []
+    for evento in eventos:
+        inicio = evento["start"].get("dateTime", evento["start"].get("date"))
+        lista.append({
+            "titulo": evento.get("summary", "Sin titulo"),
+            "inicio": inicio
+        })
+
+    return lista
+
+def obtener_servicio_gmail():
+    creds = obtener_credenciales_google()
+    return build("gmail", "v1", credentials=creds)
+
+def consultar_correos_no_leidos(max_resultados=5):
+    servicio = obtener_servicio_gmail()
+
+    label_info = servicio.users().labels().get(userId="me", id="UNREAD").execute()
+    total_no_leidos = label_info.get("messagesUnread", 0)
+
+    if total_no_leidos == 0:
+        return {"total": 0, "correos": []}
+
+    resultado = servicio.users().messages().list(
+        userId="me",
+        q="is:unread",
+        maxResults=max_resultados
+    ).execute()
+
+    mensajes = resultado.get("messages", [])
+
+    correos = []
+    for msg in mensajes:
+        detalle = servicio.users().messages().get(
+            userId="me",
+            id=msg["id"],
+            format="metadata",
+            metadataHeaders=["Subject", "From"]
+        ).execute()
+
+        headers = detalle.get("payload", {}).get("headers", [])
+        asunto = next((h["value"] for h in headers if h["name"] == "Subject"), "Sin asunto")
+        remitente = next((h["value"] for h in headers if h["name"] == "From"), "Desconocido")
+
+        correos.append({"asunto": asunto, "remitente": remitente})
+
+    return {"total": total_no_leidos, "correos": correos}

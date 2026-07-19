@@ -56,5 +56,7 @@ def reconocer_rostro(cap):
     return nombre_mas_comun
 
 if __name__ == "__main__":
-    resultado = reconocer_rostro()
+    cap = cv2.VideoCapture(0)
+    resultado = reconocer_rostro(cap)
+    cap.release()
     print(f"Persona identificada: {resultado}")
