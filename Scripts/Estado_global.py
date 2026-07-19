@@ -9,6 +9,7 @@ _lock = threading.Lock()
 
 _estado = {
     "estado_animo": "neutro",       # feliz|neutral|molesto|triste|emocionado
+    "accion": "ninguna",
     "sociabilidad": 5,               # escala 1-10, ajustable en panel tecnico
     "formalidad": 5,                 # escala 1-10
     "ultimo_usuario": None,
@@ -24,6 +25,10 @@ def _guardar_historial_disco():
     with open(HISTORIAL_FILE, "w") as f:
         json.dump(_estado["historial_usuarios"], f, indent=2, ensure_ascii=False)
 
+def set_accion(nueva_accion):
+    with _lock:
+        _estado["accion"] = nueva_accion
+        
 def get_estado():
     """Devuelve una copia segura del estado actual (thread-safe)."""
     with _lock:

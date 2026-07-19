@@ -8,6 +8,8 @@ import threading
 from collections import deque
 from Registro import contar_usuarios, registrar_usuario_nuevo
 from Recursos import client, voice, wake_model, syn_config, hablar, escuchar_comando, obtener_hora, fs
+import Movimientos
+import expresiones
 
 # ---------------- CONFIGURACION GENERAL ----------------
 
@@ -109,6 +111,7 @@ def loop_conversacion(usuario):
         hablar(f"Hola {usuario}, como te puedo ayudar")
     while True:
         print("Escuchando comando...")
+        time.sleep(0.05)
         texto = escuchar_comando()
 
         if texto is None:
@@ -132,6 +135,7 @@ def loop_conversacion(usuario):
         print(f"Ofibot ({data.get('estado_animo')}, accion: {data.get('accion')}): {respuesta_texto}")
 
         Estado_global.set_estado_animo(data.get("estado_animo", "neutro"))
+        Estado_global.set_accion(data.get("accion", "ninguna"))
 
         historial.append({"role": "model", "parts": [{"text": json.dumps(data)}]})
 
@@ -140,8 +144,6 @@ def loop_conversacion(usuario):
             segundos_rec = data.get("recordatorio_segundos")
             if texto_rec and segundos_rec:
                 Estado_global.agregar_recordatorio(usuario, texto_rec, segundos_rec)
-        elif data.get("accion", "ninguna") != "ninguna":
-            ejecutar_accion(data["accion"])
 
         hablar(respuesta_texto)
 
@@ -152,10 +154,6 @@ def loop_conversacion(usuario):
     Estado_global.marcar_fin_conversacion()
     historial.clear()
     print("Historial eliminado. Ofibot en espera.")
-    
-def ejecutar_accion(accion):
-    # Aqui se conectaran los movimientos de servos segun la accion
-    print(f"[ACCION] ejecutando: {accion}")
     
 # ---------------- WAKEWORD ----------------
 buffer_size = int(fs * 1)          # 1 segundo de audio, tamano de ventana de analisis
@@ -245,6 +243,58 @@ def hilo_wakeword():
                         muestras_nuevas = 0
 
                     en_conversacion = False
+                    
+# ---------------- GESTOS EN PARALELO ----------------
+
+ACCIONES = {
+    "ninguna": Movimientos.ninguna,
+    "baila": Movimientos.baila,
+    "celebra": Movimientos.celebra,
+    "saluda": Movimientos.saluda,
+    "asiente": Movimientos.asiente,
+    "niega": Movimientos.niega,
+    "recordatorio": Movimientos.recordatorio
+}
+
+ANIMOS = {
+    "saludo": expresiones.saludo,
+    "neutro": expresiones.neutro,
+    "enojo": expresiones.enojo,
+    "triste": expresiones.triste,
+    "emocion": expresiones.emocion,
+    "duda": expresiones.duda,
+    "aburrimiento": expresiones.aburrimiento,
+    "asombro": expresiones.asombro,
+    "descanso": expresiones.descanso
+}
+
+def hilo_gestos():
+    ultimo_animo = None
+    ultima_accion = None
+    while True:
+        estado = Estado_global.get_estado()
+        animo = estado.get("estado_animo")
+        accion = estado.get("accion")
+
+        if animo != ultimo_animo and animo in ANIMOS:
+            try:
+                ANIMOS[animo]()
+            except Exception as e:
+                print(f"error expresion: {e}")
+            ultimo_animo = animo
+
+        if accion != ultima_accion and accion in ACCIONES:
+            if accion == "niega" and estado.get("buscando_rostro"):
+                pass
+            else:
+                try:
+                    ACCIONES[accion]()
+                except Exception as e:
+                    print(f"error movimiento: {e}")
+            ultima_accion = accion
+
+        time.sleep(1)
+
 # ---------------- RECORDATORIOS ----------------
 
 def hilo_recordatorios():
@@ -262,6 +312,9 @@ def hilo_recordatorios():
 # ---------------- MAIN ----------------
 
 if __name__ == "__main__":
+    hilo_gest = threading.Thread(target=hilo_gestos, daemon=True)
+    hilo_gest.start()
+    print("[GESTOS] Hilo de gestos iniciado")
     hilo_servidor = threading.Thread(target=iniciar_flask, daemon=True)
     hilo_servidor.start()
     print("[SERVIDOR] Hilo del servidor web iniciado en puerto 5000")

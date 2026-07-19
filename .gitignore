@@ -2,7 +2,7 @@ Ofibot-env
 Scripts/dataset
 .env
 Scripts/__pycache__
-Audios/Respuesta.wav
-Audios/prueba.wav
+Audios/
 Scripts/historial_usuarios.json
 Scripts/encodings.pickle
+

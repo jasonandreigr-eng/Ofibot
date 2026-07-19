@@ -21,7 +21,7 @@ INTERACCION_WAV = "/home/semilleroiot/Desktop/Ofibot/Audios/interaccion.wav"
 fs = 16000
 tiempo_grab = int(fs * 3)
 UMBRAL_SILENCIO = 10000
-TEXTO_AMARA = "Subtitulos realizados por la comunidad de amara.org"
+TEXTO_AMARA = "subtitulos realizados por la comunidad de amara.org"
 
 print("Cargando modelos...")
 
@@ -32,7 +32,7 @@ client = genai.Client(api_key=gemini_key)
 openai_client = OpenAI(api_key=openai_key)
 
 voice = PiperVoice.load(PIPER_VOICE_PATH)
-syn_config = SynthesisConfig(volume=1.0, length_scale=0.8)
+syn_config = SynthesisConfig(volume=2.5, length_scale=0.8)
 
 wake_model = Model(
     wakeword_models=[WAKEWORD_PATH],
