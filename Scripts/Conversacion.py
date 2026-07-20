@@ -7,7 +7,7 @@ import json
 import threading
 from collections import deque
 from Registro import contar_usuarios, registrar_usuario_nuevo
-from Recursos import client, voice, wake_model, syn_config, hablar, escuchar_comando, obtener_hora, fs, reproducir_cierre,consultar_correos_no_leidos, consultar_eventos_calendario	
+from Recursos import client, voice, wake_model, syn_config, hablar, escuchar_comando, consultar_gemini, fs, reproducir_cierre,consultar_correos_no_leidos, consultar_eventos_calendario	
 import Movimientos
 import expresiones
 
@@ -25,75 +25,6 @@ umbral_wakeword = 0.25
 UMBRAL_SILENCIO = 10000  # ajustar segun sensibilidad del microfono
 TEXTO_AMARA = "Subtitulos realizados por la comunidad de amara.org"
 
-def construir_Config():
-    estado = Estado_global.get_estado()
-    config = f"""
-    Eres Ofibot, un robot asistente de oficina amigable y servicial.
-    Te estan hablando desde un microfono, si detectas un error de transcripcion dilo con naturalidad.
-    En caso que se refieran a ti con un nombre distinto a Ofibot ignoralo, es error de transcripcion.
-    Tu personalidad es:
-    - Nivel de sociabilidad actual (1-10): {estado['sociabilidad']}
-    - Nivel de formalidad actual (1-10): {estado['formalidad']}
-    - Conciso en tus respuestas (maximo 2-3 oraciones)
-    - Siempre hablas en espanol
-    Ajusta tu tono de respuesta segun estos valores.
-
-    El nombre del usuario que te llama se te dara en cada mensaje, usalo con naturalidad.
-    Si el nombre del usuario es "Unknown", NO uses ningun nombre al dirigirte a el,
-    tratalo de forma neutral y amigable sin mencionar identidad (ej: "hola, en que te puedo ayudar").
-
-    Responde SIEMPRE en formato JSON valido con esta estructura exacta:
-    {{
-      "usuario": "nombre del usuario",
-      "estado_animo": "saludo|neutro|enojo|triste|emocion|duda|aburrimiento|asombro|descanso",
-      "accion": "ninguna|baila|celebra|saluda|asiente|niega|recordatorio|consultar_calendario|consultar_correos",
-      "recordatorio_texto": "texto a recordar o null",
-      "recordatorio_segundos": numero o null,
-      "finalizar": true o false,
-      "respuesta": "texto que se dira en voz alta"
-    }}
-
-    El campo accion debe ser "recordatorio" unicamente cuando el usuario pida explicitamente que se le recuerde algo en un tiempo determinado. En ese caso, recordatorio_texto y recordatorio_segundos deben ir completos (convierte minutos/horas a segundos). En cualquier otro caso ambos deben ser null.
-    
-    El campo finalizar debe ser true unicamente cuando el usuario se despida o de a entender que quiere terminar la conversacion (ej: gracias hasta luego, eso es todo, nos vemos). En cualquier otro caso debe ser false.
-
-    El campo accion debe ser "consultar_calendario" unicamente cuando el usuario pregunte por su agenda, eventos o calendario. En este caso, el campo "respuesta" debe quedar vacio, se completara automaticamente.
-
-    El campo accion debe ser "consultar_correos" unicamente cuando el usuario pregunte por sus correos, emails o bandeja de entrada. En este caso, el campo "respuesta" debe quedar vacio, se completara automaticamente.
-    
-    No agregues texto fuera del JSON.
-    """
-    return config
-# ---------------- GEMINI ----------------
-
-def consultar_gemini(historial, intentos=3, espera=5):
-    hora_actual = obtener_hora()
-    Config = construir_Config()
-    config_dinamico = Config + f"\nHora actual en Colombia: {hora_actual}"
-    for i in range(intentos):
-        try:
-            response = client.models.generate_content(
-                model="gemini-3.1-flash-lite",
-                contents=historial,
-                config={
-                    "system_instruction": config_dinamico,
-                    "response_mime_type": "application/json"
-                }
-            )
-            return json.loads(response.text)
-        except Exception as e:
-            if i == 0:
-                print("Estoy pensando un poco...")
-            if i < intentos - 1:
-                time.sleep(espera)
-            else:
-                print(f"error gemini: {e}")
-    return {
-        "usuario": "desconocido",
-        "estado_animo": "neutro",
-        "accion": "ninguna",
-        "respuesta": "En este momento tengo problemas para pensar."
-    }
 
 # ---------------- RECONOCIMIENTO FACIAL (carga bajo demanda) ----------------
 

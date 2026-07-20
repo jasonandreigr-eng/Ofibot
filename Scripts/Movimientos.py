@@ -8,8 +8,8 @@ servo_cabeza_h = Hardware.servo_cabeza_h
 servo_cabeza_v = Hardware.servo_cabeza_v
 servo_izq.angle = 0
 servo_der.angle = 0
-servo_cabeza_h.angle = 90
-servo_cabeza_v.angle = 90
+servo_cabeza_h.angle = 102
+servo_cabeza_v.angle = 85
 
 "ninguna|baila|celebra|saluda|asiente|niega|recordatorio"
 def ninguna():
@@ -55,20 +55,20 @@ def asiente(ciclos=3, pausa=0.8):
         servo_cabeza_v.angle = 110
         time.sleep(pausa)
         
-        servo_cabeza_v.angle = 70
+        servo_cabeza_v.angle = 75
         time.sleep(pausa)
         
-    servo_cabeza_v.angle = 90
+    servo_cabeza_v.angle = 85
 
 def niega(ciclos=3, pausa=0.8):
     for _ in range(ciclos):
-        servo_cabeza_h.angle = 110
+        servo_cabeza_h.angle = 122
         time.sleep(pausa)
         
-        servo_cabeza_h.angle = 70
+        servo_cabeza_h.angle = 82
         time.sleep(pausa)
         
-    servo_cabeza_h.angle = 90
+    servo_cabeza_h.angle = 102
 
 def recordatorio(ciclos=2, pausa=0.8):
     for _ in range(ciclos):
@@ -84,7 +84,7 @@ def recordatorio(ciclos=2, pausa=0.8):
     servo_izq.angle = 25
 
 if __name__ == "__main__":
-  moves_lista = [ninguna,baila,celebra,saluda,asiente,niega,recordatorio]
+  moves_lista = [asiente,niega] #ninguna,baila,celebra,saluda, ,recordatorio
   for move in moves_lista:
       print(f"Probando: {move.__name__}")
       move()

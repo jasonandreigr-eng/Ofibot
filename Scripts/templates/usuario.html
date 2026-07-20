@@ -4,12 +4,37 @@
   <meta charset="UTF-8">
   <title>Ofibot - Panel Usuario</title>
   <style>
-    body { font-family: sans-serif; text-align: center; padding: 2rem; }
-    .estado { font-size: 2.5rem; font-weight: bold; text-transform: uppercase; }
-    button { margin: 0.3rem; padding: 0.5rem 1rem; }
+	  :root[data-theme="light"] {
+	    --bg: #f4f4f4; --text: #222; --card: #fff; --accent: #4a90d9;
+	  }
+	  :root[data-theme="dark"] {
+	    --bg: #1a1a1a; --text: #eee; --card: #2b2b2b; --accent: #6aa8e0;
+	  }
+	  body {
+	    font-family: sans-serif; text-align: center; padding: 2rem;
+	    background: var(--bg); color: var(--text);
+	    transition: background 0.3s, color 0.3s;
+	  }
+	  button { margin: 0.3rem; padding: 0.5rem 1rem; border: none; border-radius: 6px;
+		   background: var(--accent); color: #fff; cursor: pointer; }
+	  .estado { font-size: 2.5rem; font-weight: bold; text-transform: uppercase; }
+	  #toggle-tema { position: fixed; top: 1rem; right: 1rem; }
+
+	  .chat-box {
+	    max-height: 250px; overflow-y: auto; text-align: left;
+	    background: var(--card); border-radius: 8px; padding: 0.8rem;
+	    margin-bottom: 0.5rem;
+	  }
+	  .chat-box p { margin: 0.4rem 0; }
+	  .chat-box .usuario { color: var(--accent); font-weight: bold; }
+	  .chat-box .ofibot { color: var(--text); }
+	  .chat-input { display: flex; gap: 0.5rem; }
+	  .chat-input input { flex: 1; padding: 0.5rem; border-radius: 6px; border: 1px solid var(--border, #ccc); }
+
   </style>
 </head>
 <body>
+  <button id="toggle-tema" onclick="cambiarTema()">Modo</button>
   <h1>Estado de Ofibot</h1>
   <div class="estado" id="estado">Neutral</div>
   <p id="animo">Cargando...</p>
@@ -26,6 +51,20 @@
   <button onclick="cambiarAnimo('asombro')">Asombro</button>
   <button onclick="cambiarAnimo('descanso')">Descanso</button>
 
+  <h3>Ejecutar rutina</h3>
+  <button class="btn-rutina" onclick="ejecutarAccion('saluda')">Saluda</button>
+  <button class="btn-rutina" onclick="ejecutarAccion('baila')">Baila</button>
+  <button class="btn-rutina" onclick="ejecutarAccion('celebra')">Celebra</button>
+  <button class="btn-rutina" onclick="ejecutarAccion('asiente')">Asiente</button>
+  <button class="btn-rutina" onclick="ejecutarAccion('niega')">Niega</button>
+
+  <h3>Chatea con Ofibot</h3>
+  <div id="chat-box" class="chat-box"></div>
+  <div class="chat-input">
+    <input type="text" id="chat-mensaje" placeholder="Escribe tu mensaje..." onkeydown="if(event.key==='Enter') enviarMensaje()">
+    <button id="btn-enviar" class="btn-rutina" onclick="enviarMensaje()">Enviar</button>
+  </div>
+
   <script>
     async function actualizar() {
       const res = await fetch("/api/estado");
@@ -34,6 +73,17 @@
       document.getElementById("animo").innerText = "Animo: " + data.estado_animo;
       document.getElementById("tiempo_respuesta").innerText =
         data.ultimo_tiempo_respuesta ? `Ultima respuesta: ${data.ultimo_tiempo_respuesta}s` : "";
+    }
+
+    async function ejecutarAccion(accion) {
+      const res = await fetch("/api/accion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accion: accion })
+      });
+      if (res.status === 409) {
+        alert("Ofibot esta en conversacion, espera a que termine.");
+      }
     }
 
     async function cambiarAnimo(nuevo) {
@@ -45,8 +95,60 @@
       actualizar();
     }
 
+    async function enviarMensaje() {
+      const input = document.getElementById("chat-mensaje");
+      const mensaje = input.value.trim();
+      if (!mensaje) return;
+
+      agregarMensajeChat("usuario", mensaje);
+      input.value = "";
+      input.disabled = true;
+      document.getElementById("btn-enviar").disabled = true;
+
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mensaje: mensaje })
+      });
+
+      const data = await res.json();
+      if (res.status === 409) {
+        agregarMensajeChat("ofibot", "(Ofibot esta ocupado en otra conversacion, intenta en un momento)");
+      } else if (data.error) {
+        agregarMensajeChat("ofibot", "(Ocurrio un error: " + data.error + ")");
+      } else {
+        agregarMensajeChat("ofibot", data.respuesta);
+      }
+
+      input.disabled = false;
+      document.getElementById("btn-enviar").disabled = false;
+      input.focus();
+    }
+
+    function agregarMensajeChat(quien, texto) {
+      const box = document.getElementById("chat-box");
+      const p = document.createElement("p");
+      p.innerHTML = `<span class="${quien}">${quien === "usuario" ? "Tu" : "Ofibot"}:</span> ${texto}`;
+      box.appendChild(p);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function actualizarBotonesRutina(enConversacion) {
+      document.querySelectorAll(".btn-rutina").forEach(b => b.disabled = enConversacion);
+    }
+    function aplicarTema(tema) {
+	  document.documentElement.setAttribute("data-theme", tema);
+   	  localStorage.setItem("ofibot_tema", tema);
+    }
+    function cambiarTema()  {
+	  const actual = document.documentElement.getAttribute("data-theme");
+	  aplicarTema(actual == "dark" ? "light" : "dark");
+    }
+    aplicarTema(localStorage.getItem("ofibot_tema") || "light");
+
     setInterval(actualizar, 2000); // refresca cada 2 segundos
     actualizar();
+    actualizarBotonesRutina(data.en_conversacion);
   </script>
 </body>
 </html>

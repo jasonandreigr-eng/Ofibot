@@ -12,6 +12,7 @@ _estado = {
     "accion": "ninguna",
     "sociabilidad": 5,               # escala 1-10, ajustable en panel tecnico
     "formalidad": 5,                 # escala 1-10
+    "estado_animo_nivel":5,          # escala 1-10, 1:triste - 10: alegre
     "ultimo_usuario": None,
     "buscando_rostro": False,
     "en_conversacion": False,
@@ -39,16 +40,22 @@ def set_estado_animo(nuevo_animo):
     with _lock:
         _estado["estado_animo"] = nuevo_animo
 
-def set_config(sociabilidad=None, formalidad=None):
+def set_config(sociabilidad=None, formalidad=None, estado_animo_nivel=None):
     with _lock:
         if sociabilidad is not None:
             _estado["sociabilidad"] = sociabilidad
         if formalidad is not None:
             _estado["formalidad"] = formalidad
+        if estado_animo_nivel is not None:
+            _estado["estado_animo_nivel"] = estado_animo_nivel
 
 def set_buscando_rostro(valor):
     with _lock:
         _estado["buscando_rostro"] = valor
+
+def set_en_conversacion(valor: bool):
+    with _lock:
+        _estado["en_conversacion"] = valor
 
 def marcar_inicio_conversacion(usuario):
     with _lock:
