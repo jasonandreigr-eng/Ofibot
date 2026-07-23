@@ -18,23 +18,26 @@ def hex_to_rgb(hex_color):
     return r, g, b
 
 def mostrar_oled(oled, img, intentos=3, espera=0.1):
-    oled.fill(0)
     for i in range(intentos):
         try:
-            oled.image(img)
-            oled.show()
+            with Hardware.i2c_lock:
+                oled.fill(0)
+                oled.image(img)
+                oled.show()
             return True
         except OSError:
             time.sleep(espera)
     print("Error persistente en OLED")
     return False
 
+
 def set_color(r, g, b, intentos=3, espera=0.15):
     for i in range(intentos):
         try:
-            led_r.duty_cycle = int((r / 255) * 65535)
-            led_g.duty_cycle = int((g / 255) * 65535)
-            led_b.duty_cycle = int((b / 255) * 65535)
+            with Hardware.i2c_lock:
+                led_r.duty_cycle = int((r / 255) * 65535)
+                led_g.duty_cycle = int((g / 255) * 65535)
+                led_b.duty_cycle = int((b / 255) * 65535)
             return True
         except OSError:
             time.sleep(espera)

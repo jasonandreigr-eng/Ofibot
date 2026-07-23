@@ -24,3 +24,4 @@ openwakeword
 python-dotenv
 google-auth
 google-api-python-clients
+tavily-python

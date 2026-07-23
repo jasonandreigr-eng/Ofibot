@@ -7,24 +7,19 @@ import json
 import threading
 from collections import deque
 from Registro import contar_usuarios, registrar_usuario_nuevo
-from Recursos import client, voice, wake_model, syn_config, hablar, escuchar_comando, consultar_gemini, fs, reproducir_cierre,consultar_correos_no_leidos, consultar_eventos_calendario	
+from Recursos import (
+    hablar, escuchar_comando, consultar_gemini, reproducir_cierre,
+    tavily_client, consultar_eventos_calendario, crear_evento_calendario,
+    consultar_correos_no_leidos, fs
+)
 import Movimientos
 import expresiones
 
 # ---------------- CONFIGURACION GENERAL ----------------
 
-WAKEWORD_PATH = "/home/semilleroiot/Desktop/Ofibot/Modelos/ofibot.onnx"
-PIPER_VOICE_PATH = "/home/semilleroiot/Desktop/Ofibot/pipervoices/es_ES-carlfm-x_low.onnx"
-RESPUESTA_WAV = "/home/semilleroiot/Desktop/Ofibot/Audios/Respuesta.wav"
-INTERACCION_WAV = "/home/semilleroiot/Desktop/Ofibot/Audios/interaccion.wav"
-
-fs = 16000
 chunk_size = int(fs * 2)
-tiempo_grab = int(fs * 3)
 umbral_wakeword = 0.25
-UMBRAL_SILENCIO = 10000  # ajustar segun sensibilidad del microfono
-TEXTO_AMARA = "Subtitulos realizados por la comunidad de amara.org"
-
+MAX_USUARIOS = 6
 
 # ---------------- RECONOCIMIENTO FACIAL (carga bajo demanda) ----------------
 
@@ -98,21 +93,6 @@ def loop_conversacion(usuario):
                 detalle = "\n".join([f"{c['asunto']} - {c['remitente']}" for c in info["correos"]])
                 resumen_correos = f"Total no leidos: {info['total']}\n{detalle}"
 
-            historial.append({"role": "user", "parts": [{"text": f"[Datos de correo]\n{resumen_correos}\nResume esto en voz para el usuario."}]})
-            data = consultar_gemini(historial)
-            respuesta_texto = data.get("respuesta", "")
-            historial.append({"role": "model", "parts": [{"text": json.dumps(data)}]})
-
-        hablar(respuesta_texto)
-
-        if data.get("finalizar", False):
-            print("Despedida detectada. Cerrando conversacion.")
-            break
-    reproducir_cierre()
-    Estado_global.marcar_fin_conversacion()
-    historial.clear()
-    print("Historial eliminado. Ofibot en espera.")
-    
 # ---------------- WAKEWORD ----------------
 buffer_size = int(fs * 1)          # 1 segundo de audio, tamano de ventana de analisis
 paso_lectura = int(fs * 0.25)      # cada 250ms se evalua una nueva ventana (solapamiento)
@@ -124,8 +104,8 @@ muestras_nuevas = 0                # cuenta cuantas muestras nuevas llegaron des
 en_conversacion = False
 ultimo_activacion = 0
 delay_reactivacion = 3
-MAX_USUARIOS = 6
 
+eventos_avisados = set()
 def callback(indata, frames, time_info, status):
     global buffer_circular, muestras_nuevas
 
@@ -269,6 +249,40 @@ def hilo_recordatorios():
         for r in vencidos:
             hablar(f"Recordatorio: {r['texto']}")
 
+
+# ---------------- EVENTOS ----------------
+
+def hilo_aviso_eventos():
+    while True:
+        time.sleep(60)
+
+        if en_conversacion:
+            continue
+
+        try:
+            eventos = consultar_eventos_calendario(dias=1)
+        except Exception as e:
+            print(f"error consultando calendario: {e}")
+            continue
+
+        ahora = datetime.now(ZoneInfo("America/Bogota"))
+
+        for evento in eventos:
+            evento_id = evento.get("titulo") + evento.get("inicio")
+            if evento_id in eventos_avisados:
+                continue
+
+            try:
+                inicio = datetime.fromisoformat(evento["inicio"])
+            except ValueError:
+                continue
+
+            minutos_restantes = (inicio - ahora).total_seconds() / 60
+
+            if 0 <= minutos_restantes <= 20:
+                hablar(f"Recuerda que en {int(minutos_restantes)} minutos tienes: {evento['titulo']}")
+                eventos_avisados.add(evento_id)
+
 # ---------------- MAIN ----------------
 
 if __name__ == "__main__":
@@ -286,6 +300,10 @@ if __name__ == "__main__":
     hilo_rec.start()
     print("[RECORDATORIOS] Hilo de recordatorios iniciado")
 
+    hilo_aviso = threading.Thread(target=hilo_aviso_eventos, daemon=True)
+    hilo_aviso.start()
+    print("[EVENTOS] Hilo de aviso de eventos iniciado")
+    
     with sd.InputStream(samplerate=fs, channels=1, dtype='int16', callback=callback):
         print("Escuchando wakeword...")
         while True:

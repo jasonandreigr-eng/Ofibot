@@ -20,19 +20,22 @@ def hay_rostro(cap):
 
 def buscar_rostro():
     servo_cuello = Hardware.servo_cabeza_h
-    servo_cuello.angle = POS_INICIAL
+    with Hardware.i2c_lock:
+        servo_cuello.angle = POS_INICIAL
     time.sleep(0.2)
 
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
-        servo_cuello.angle = POS_INICIAL
+        with Hardware.i2c_lock:
+            servo_cuello.angle = POS_INICIAL
         return None
 
     resultado_final = None
     try:
         angulo = POS_INICIAL
         while angulo <= POS_MAX:
-            servo_cuello.angle = angulo
+            with Hardware.i2c_lock:
+                servo_cuello.angle = angulo
             time.sleep(PAUSA)
             if hay_rostro(cap):
                 resultado = reconocer_rostro(cap)
@@ -42,12 +45,14 @@ def buscar_rostro():
             angulo += PASO
 
         if resultado_final is None:
-            servo_cuello.angle = POS_INICIAL
+            with Hardware.i2c_lock:
+                servo_cuello.angle = POS_INICIAL
             time.sleep(0.2)
 
             angulo = POS_INICIAL
             while angulo >= POS_MIN:
-                servo_cuello.angle = angulo
+                with Hardware.i2c_lock:
+                    servo_cuello.angle = angulo
                 time.sleep(PAUSA)
                 if hay_rostro(cap):
                     resultado = reconocer_rostro(cap)
@@ -58,5 +63,6 @@ def buscar_rostro():
     finally:
         cap.release()
 
-    servo_cuello.angle = POS_INICIAL
+    with Hardware.i2c_lock:
+        servo_cuello.angle = POS_INICIAL
     return resultado_final

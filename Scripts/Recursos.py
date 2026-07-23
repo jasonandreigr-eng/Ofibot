@@ -7,32 +7,47 @@ import soundfile as sf
 import Estado_global
 import time
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from google import genai
 from openai import OpenAI
+from tavily import TavilyClient
 from piper import PiperVoice
 from piper import SynthesisConfig
 from openwakeword.model import Model
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
 
+# PATHS
 WAKEWORD_PATH = "/home/semilleroiot/Desktop/Ofibot/Modelos/ofibot.onnx"
 PIPER_VOICE_PATH = "/home/semilleroiot/Desktop/Ofibot/pipervoices/es_ES-carlfm-x_low.onnx"
 RESPUESTA_WAV = "/home/semilleroiot/Desktop/Ofibot/Audios/Respuesta.wav"
 INTERACCION_WAV = "/home/semilleroiot/Desktop/Ofibot/Audios/interaccion.wav"
+SONIDO_CIERRE_WAV = "/home/semilleroiot/Desktop/Ofibot/Audios/cierre.wav"
 
+#Conf STT
 fs = 16000
 tiempo_grab = int(fs * 3)
 UMBRAL_SILENCIO = 10000
 TEXTO_AMARA = "subtitulos realizados por la comunidad de amara.org"
+MARGEN_INICIO_SEG = 0.2
 
+SCOPES = [
+    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/gmail.readonly"
+]
+
+#Carga modelos 
 print("Cargando modelos...")
 
 load_dotenv()
 gemini_key = os.getenv("GEMINI_API_KEY")
 openai_key = os.getenv("OPENAI_API_KEY")
+tavily_key = os.getenv("TAVILY_API_KEY")
 client = genai.Client(api_key=gemini_key)
 openai_client = OpenAI(api_key=openai_key)
+tavily_client = TavilyClient(api_key=tavily_key)
 
 voice = PiperVoice.load(PIPER_VOICE_PATH)
 syn_config = SynthesisConfig(volume=2.5, length_scale=0.8)
@@ -41,6 +56,7 @@ wake_model = Model(
     wakeword_models=[WAKEWORD_PATH],
     inference_framework="onnx"
 )
+
 for _ in range(5):
     audio_dummy = np.zeros(int(fs * 3), dtype='int16')
     wake_model.predict(audio_dummy)
@@ -59,14 +75,10 @@ def hablar(texto):
     sd.play(data, samplerate)
     sd.wait()
 
-MARGEN_INICIO_SEG = 0.2
-
 def es_audio_vacio(audio):
     muestras_margen = int(fs * MARGEN_INICIO_SEG)
     audio_util = audio[muestras_margen:]
     return np.abs(audio_util).max() < UMBRAL_SILENCIO
-
-SONIDO_CIERRE_WAV = "/home/semilleroiot/Desktop/Ofibot/Audios/cierre.wav"
 
 def reproducir_cierre():
     data, samplerate = sf.read(SONIDO_CIERRE_WAV)
@@ -95,24 +107,32 @@ def construir_Config():
     {{
       "usuario": "nombre del usuario",
       "estado_animo": "saludo|neutro|enojo|triste|emocion|duda|aburrimiento|asombro|descanso",
-      "accion": "ninguna|baila|celebra|saluda|asiente|niega|recordatorio|consultar_calendario|consultar_correos",
+      "accion": "ninguna|baila|celebra|saluda|asiente|niega|recordatorio|consultar_calendario|consultar_correos|buscar_internet|crear_evento",
       "recordatorio_texto": "texto a recordar o null",
       "recordatorio_segundos": numero o null,
+      "evento_titulo": "titulo del evento o null",
+      "evento_inicio": "fecha y hora ISO 8601 o null",
+      "evento_duracion_min": numero o null,
       "finalizar": true o false,
       "respuesta": "texto que se dira en voz alta"
     }}
 
     El campo accion debe ser "recordatorio" unicamente cuando el usuario pida explicitamente que se le recuerde algo en un tiempo determinado. En ese caso, recordatorio_texto y recordatorio_segundos deben ir completos (convierte minutos/horas a segundos). En cualquier otro caso ambos deben ser null.
-    
+
     El campo finalizar debe ser true unicamente cuando el usuario se despida o de a entender que quiere terminar la conversacion (ej: gracias hasta luego, eso es todo, nos vemos). En cualquier otro caso debe ser false.
 
     El campo accion debe ser "consultar_calendario" unicamente cuando el usuario pregunte por su agenda, eventos o calendario. En este caso, el campo "respuesta" debe quedar vacio, se completara automaticamente.
 
     El campo accion debe ser "consultar_correos" unicamente cuando el usuario pregunte por sus correos, emails o bandeja de entrada. En este caso, el campo "respuesta" debe quedar vacio, se completara automaticamente.
-    
+
+    El campo accion debe ser "buscar_internet" unicamente cuando el usuario pregunte por informacion actual, reciente o que requiera datos externos que no tengas certeza de conocer (noticias, resultados deportivos, clima, eventos actuales, etc). No la uses para preguntas generales que ya puedas responder con tu conocimiento. En este caso, el campo "respuesta" debe quedar vacio, se completara automaticamente.
+
+    El campo accion debe ser "crear_evento" unicamente cuando el usuario pida explicitamente agendar o crear un evento en su calendario. En ese caso, evento_titulo, evento_inicio y evento_duracion_min deben ir completos (usa la hora actual proporcionada para calcular fechas relativas como "manana" o "el viernes"). En cualquier otro caso los tres deben ser null.
+
     No agregues texto fuera del JSON.
     """
     return config
+
 # ---------------- GEMINI ----------------
 
 def consultar_gemini(historial, intentos=3, espera=5):
@@ -143,7 +163,6 @@ def consultar_gemini(historial, intentos=3, espera=5):
         "accion": "ninguna",
         "respuesta": "En este momento tengo problemas para pensar."
     }
-
 
 def normalizar(texto):
     texto = unicodedata.normalize('NFKD', texto)
@@ -184,14 +203,6 @@ def escuchar_comando(intentos=3, espera=3):
 
     return None
 
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-
-SCOPES = [
-    "https://www.googleapis.com/auth/calendar.readonly",
-    "https://www.googleapis.com/auth/gmail.readonly"
-]
-
 def obtener_credenciales_google():
     creds = Credentials(
         token=None,
@@ -206,9 +217,6 @@ def obtener_credenciales_google():
 def obtener_servicio_calendar():
     creds = obtener_credenciales_google()
     return build("calendar", "v3", credentials=creds)
-
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 
 def consultar_eventos_calendario(dias=7):
     servicio = obtener_servicio_calendar()
@@ -238,6 +246,21 @@ def consultar_eventos_calendario(dias=7):
         })
 
     return lista
+
+def crear_evento_calendario(titulo, inicio_iso, duracion_minutos=60):
+    servicio = obtener_servicio_calendar()
+    zona = "America/Bogota"
+    inicio = datetime.fromisoformat(inicio_iso)
+    fin = inicio + timedelta(minutes=duracion_minutos)
+
+    evento = {
+        "summary": titulo,
+        "start": {"dateTime": inicio.isoformat(), "timeZone": zona},
+        "end": {"dateTime": fin.isoformat(), "timeZone": zona}
+    }
+
+    resultado = servicio.events().insert(calendarId="primary", body=evento).execute()
+    return resultado.get("htmlLink")
 
 def obtener_servicio_gmail():
     creds = obtener_credenciales_google()
